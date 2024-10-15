@@ -3,6 +3,6 @@ build:
 	@echo "Building the project..."
 	npm run build
 
-run::
+run:
 	@echo "Starting the project..."
-	npm start
+	npm run dev

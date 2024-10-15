@@ -1,10 +1,23 @@
-"use client";
+'use client'
 
 import { useState } from 'react'
 import { ChevronDown, ArrowUpDown, Settings, X, Star, Info, Route } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
+// Define interfaces
+interface Chain {
+  name: string;
+  symbol: string;
+  color: string;
+}
+
+interface Token {
+  symbol: string;
+  name: string;
+  color: string;
+}
 
 const chains = [
   { name: 'Fantom', symbol: 'FTM', color: 'bg-blue-500' },
@@ -25,20 +38,7 @@ const tokens = [
   { symbol: 'DAI', name: 'Dai', color: 'bg-yellow-500' },
 ]
 
-// Add this interface at the top of your file, after the imports
-interface Chain {
-  name: string;
-  symbol: string;
-  color: string;
-}
-
-interface Token {
-  symbol: string;
-  name: string;
-  color: string;
-}
-
-export default function Component() {
+export function CryptoExchange() {
   const [fromChain, setFromChain] = useState(chains[0]) // Fantom
   const [toChain, setToChain] = useState(chains[7]) // Base
   const [fromToken, setFromToken] = useState(chains[0]) // FTM (native token)
@@ -61,9 +61,7 @@ export default function Component() {
   const handleChainSelect = (chain: Chain) => {
     if (showChainSelect === 'from') {
       setFromChain(chain);
-      // Find the native token for this chain
-      const nativeToken = tokens.find(token => token.symbol === chain.symbol) || tokens[0];
-      setFromToken(nativeToken);
+      setFromToken(chain); // Set native token as default
     } else if (showChainSelect === 'to') {
       setToChain(chain);
     }
@@ -180,7 +178,6 @@ export default function Component() {
           <DialogHeader>
             <DialogTitle className="flex justify-between items-center">
               <span>Select chain</span>
-              <X className="cursor-pointer" onClick={() => setShowChainSelect(false)} />
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -207,7 +204,6 @@ export default function Component() {
           <DialogHeader>
             <DialogTitle className="flex justify-between items-center">
               <span>Select token</span>
-              <X className="cursor-pointer" onClick={() => setShowTokenSelect(false)} />
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -256,7 +252,6 @@ export default function Component() {
           <DialogHeader>
             <DialogTitle className="flex justify-between items-center">
               <span>Settings</span>
-              <X className="cursor-pointer" onClick={() => setShowSettings(false)} />
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -270,7 +265,9 @@ export default function Component() {
                   <Button
                     key={value}
                     variant={slippage === value ? 'secondary' : 'outline'}
-                    className={`flex-1 ${slippage === value ? 'bg-gradient-to-r from-blue-400 to-blue-600 text-white' : ''}`}
+                    className={`flex-1 ${slippage === value 
+                      ? 'bg-gradient-to-r from-blue-400 to-blue-600 text-white'  // Blue when selected
+                      : 'bg-gray-500 text-white'}`}  // Middle grey when not selected
                     onClick={() => setSlippage(value)}
                   >
                     {value}%
@@ -281,7 +278,7 @@ export default function Component() {
                     type="number"
                     value={slippage}
                     onChange={(e) => setSlippage(e.target.value)}
-                    className="pr-8 bg-gradient-to-r from-blue-400 to-blue-600 border-0 text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="pr-8 w-20 bg-gray-700 border-gray-600 text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     min="0"
                     step="0.1"
                   />
@@ -290,16 +287,16 @@ export default function Component() {
               </div>
             </div>
             <div>
-              <label className="flex items-center  space-x-2 text-sm mb-2">
+              <label className="flex items-center space-x-2 text-sm mb-2">
                 <span>Transaction deadline</span>
                 <Info className="w-4 h-4 text-gray-400" />
               </label>
-              <div  className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2">
                 <Input
                   type="number"
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-16 bg-gray-700 border-gray-600 text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   step="1"
                   min="0"
                 />
