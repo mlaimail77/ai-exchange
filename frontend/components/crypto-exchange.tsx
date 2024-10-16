@@ -5,6 +5,7 @@ import { ChevronDown, ArrowUpDown, Settings, X, Star, Info, Bot, Send, Wallet } 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import axios from 'axios'
 
 const chains = [
   { name: 'Fantom', symbol: 'FTM', color: 'bg-blue-500' },
@@ -37,9 +38,10 @@ export default function Component() {
   const [slippage, setSlippage] = useState('1.0')
   const [deadline, setDeadline] = useState('30')
   const [destinationAddress, setDestinationAddress] = useState('')
-  const [aiInput, setAiInput] = useState('')
-  const [showAiChat, setShowAiChat] = useState(false)
-  const [aiConversation, setAiConversation] = useState<{role: 'user' | 'ai', content: string}[]>([])
+  const [aiInput, setAIInput] = useState('')
+  const [showAIChat, setShowAIChat] = useState(false)
+  const [aiConversation, setAIConversation] = useState<{role: 'user' | 'ai', content: string}[]>([])
+  const [loading, setLoading] = useState(false)
 
   // New state for temporary settings
   const [tempSlippage, setTempSlippage] = useState(slippage)
@@ -92,15 +94,30 @@ export default function Component() {
     // The destination address is now stored in the state and can be used elsewhere
   };
 
-  const handleAiInputSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && aiInput.trim()) {
-      setAiConversation([...aiConversation, { role: 'user', content: aiInput }]);
-      setShowAiChat(true);
-      setAiInput('');
-      // Simulate AI response (replace with actual AI integration)
-      setTimeout(() => {
-        setAiConversation(prev => [...prev, { role: 'ai', content: "I'm an AI agent. How can I help you with your crypto exchange?" }]);
-      }, 1000);
+  const handleAIInputSubmit = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter' || !aiInput.trim()) return;
+
+    setAIConversation(prev => [...prev, { role: 'user', content: aiInput }]);
+    setShowAIChat(true);
+    setLoading(true);
+
+    try {
+      const { data } = await axios.post('http://localhost:8000/api/llm', {
+        query: aiInput,
+        vector: [0.1, 0.2, 0.3] // dummy vector
+      });
+
+      setAIConversation(prev => [...prev, { role: 'ai', content: data.llm_response }]);
+    } catch (error) {
+      console.error('Error calling the LLM API:', error);
+      const errorMessage = axios.isAxiosError(error) && error.response?.data?.detail
+        ? error.response.data.detail
+        : 'Failed to process your request';
+      console.error('Detailed error:', errorMessage);
+      setAIConversation(prev => [...prev, { role: 'ai', content: errorMessage }]);
+    } finally {
+      setLoading(false);
+      setAIInput('');
     }
   };
 
@@ -123,10 +140,10 @@ export default function Component() {
               className="bg-transparent text-white w-full focus:outline-none"
               placeholder="What would you like to accomplish?"
               value={aiInput}
-              onChange={(e) => setAiInput(e.target.value)}
-              onKeyPress={handleAiInputSubmit}
+              onChange={(e) => setAIInput(e.target.value)}
+              onKeyPress={handleAIInputSubmit}
             />
-            <Send className="text-blue-400 w-5 h-5 ml-2 cursor-pointer" onClick={() => handleAiInputSubmit({ key: 'Enter' } as React.KeyboardEvent<HTMLInputElement>)} />
+            <Send className="text-blue-400 w-5 h-5 ml-2 cursor-pointer" onClick={() => handleAIInputSubmit({ key: 'Enter' } as React.KeyboardEvent<HTMLInputElement>)} />
           </div>
         </div>
 
@@ -398,7 +415,7 @@ export default function Component() {
         </DialogContent>
       </Dialog>
 
-      {showAiChat && (
+      {showAIChat && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden w-full max-w-md">
             <div className="bg-gray-700 p-4 flex items-center justify-between">
@@ -406,7 +423,7 @@ export default function Component() {
                 <Bot className="text-blue-400 w-6 h-6 mr-2" />
                 <h3 className="text-white font-semibold">AI Agent</h3>
               </div>
-              <X className="text-gray-400 cursor-pointer" onClick={() => setShowAiChat(false)} />
+              <X className="text-gray-400 cursor-pointer" onClick={() => setShowAIChat(false)} />
             </div>
             <div className="h-96 overflow-y-auto p-4 space-y-4">
               {aiConversation.map((message, index) => (
@@ -423,8 +440,8 @@ export default function Component() {
                 className="w-full bg-gray-600 text-white rounded-lg p-2 focus:outline-none"
                 placeholder="Type your message..."
                 value={aiInput}
-                onChange={(e) => setAiInput(e.target.value)}
-                onKeyPress={handleAiInputSubmit}
+                onChange={(e) => setAIInput(e.target.value)}
+                onKeyPress={handleAIInputSubmit}
               />
             </div>
           </div>
