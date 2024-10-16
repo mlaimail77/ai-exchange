@@ -7,4 +7,4 @@ The goal of this project is to to start with an MVP front-end that is similar to
 
 ---
 ## APP Demo
-![Page Layout](assets/app-demo.jpg)
+![Page Layout](assets/app-demo.png)
