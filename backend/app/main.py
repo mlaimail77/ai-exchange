@@ -1,11 +1,13 @@
+from openai import OpenAI
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .llm import get_llm_response
-from .vector_db import match_intent
-from .dag import execute_dag
+from .bot import Bot
+from .rag import RAG
+from .utils import read_api_key
 import uvicorn
 import logging
+import os
 
 app = FastAPI()
 
@@ -22,9 +24,32 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# Get the OpenAI API key
+api_key_file = os.path.join(os.path.dirname(__file__), 'oai-api-key.lic')
+api_key = read_api_key(api_key_file)
+    
+# Initialize the OpenAI client
+client = OpenAI(api_key=api_key)
+
+# Instantiate the Bot
+bot = Bot(name="Agent", persona="You are a crypto exchange customer service agent.\
+                        You will try to understand the user's intent and synthesize\
+                        what the user is trying to accomplish in one short sentence. \
+                        What you synthesized will be used to query a vector database\
+                        to retreive the most relevant actions. You will have context of\
+                        the user's previous querys, but if each response is uncorrelated\
+                        treat the latest query as a new question when trying to understand\
+                        the user's intent. Don't be afraid to reject non-crypto related asks.\
+                        Start the response by saying: Well received! I believe you are \
+                        trying to...; with the latter being the synthesized intent of the user")
+
+# Instantiate the RAG
+embedding_file_path = os.path.join(os.path.dirname(__file__), 'rag_embeddings.json')
+rag = RAG(embedding_file_path)
+
+# Instantiate the User querey from frontend
 class UserQuery(BaseModel):
     query: str
-    vector: list[float]
 
 @app.post("/api/llm")
 async def process_user_query(user_query: UserQuery):
@@ -32,22 +57,28 @@ async def process_user_query(user_query: UserQuery):
         # Log the message received from frontend
         logger.info(f"Received message from frontend: {user_query.query}")
 
-        # Step 1: Match intent using vector database
-        intent = match_intent(user_query.vector)
-        logger.info(f"Matched intent: {intent}")
+        # Step 1: Get LLM response using the bot instance
+        bot.add_message("user", user_query.query)
+        bot_response = bot.get_response(client, temperature=1.0, max_tokens=100) 
+     
+        # Step 2: Convert the user bot_response to embeddings
+        intent_embeddings = rag.get_input_embeddings(client, bot_response)
+        logger.info(f"Intent embeddings generated: {intent_embeddings}")  # Log the intent embeddings
 
-        # Step 2: Get LLM response
-        llm_response = get_llm_response(user_query.query)
-        logger.info(f"LLM response: {llm_response}")
+        # Step 3: Match embeddings with the VectorDB within the RAG   
+        rag_response = rag.process_query(intent_embeddings)
+        logger.info(f"RAG match result: {rag_response}")
 
-        # Step 3: Execute DAG (disabled for now)
-        # dag_result = execute_dag(llm_response)
-        # logger.info(f"DAG execution result: {dag_result}")
-
-        # Ensure that intent and llm_response are JSON serializable
+        # Ensure that intent, llm_response, and rag_result are JSON serializable
+        llm_response = str(bot_response)
+        if rag_response[1]:  # Check if there is a match to intent
+            llm_response += " I shall help you process your intent..."  # Add message if intent is matched
+        else:
+            llm_response = "Sorry, there seems to be a problem understanding your intent, please try again!"
+        
         return {
-            "intent": str(intent),
-            "llm_response": str(llm_response)
+            "llm_response": llm_response, 
+            "rag_result": rag_response[0]
         }
     except Exception as e:
         logger.error(f"Error processing query: {str(e)}")

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from 'react'
-import { ChevronDown, ArrowUpDown, Settings, X, Star, Info, Bot, Send, Wallet } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ChevronDown, ArrowUpDown, Settings, X, Star, Info, Bot, Send, Wallet, CheckCircle} from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import axios from 'axios'
+import Confetti from 'react-confetti'; // Import Confetti
 
 const chains = [
   { name: 'Fantom', symbol: 'FTM', color: 'bg-blue-500' },
@@ -26,6 +27,16 @@ const tokens = [
   { symbol: 'DAI', name: 'Dai', color: 'bg-yellow-500' },
 ]
 
+const getRandomChain = () => {
+  const randomIndex = Math.floor(Math.random() * chains.length);
+  return chains[randomIndex];
+};
+
+const getRandomToken = () => {
+  const randomIndex = Math.floor(Math.random() * tokens.length);
+  return tokens[randomIndex];
+};
+
 export default function Component() {
   const [fromChain, setFromChain] = useState(chains[0]) // Fantom
   const [toChain, setToChain] = useState(chains[7]) // Base
@@ -40,12 +51,17 @@ export default function Component() {
   const [destinationAddress, setDestinationAddress] = useState('')
   const [aiInput, setAIInput] = useState('')
   const [showAIChat, setShowAIChat] = useState(false)
-  const [aiConversation, setAIConversation] = useState<{role: 'user' | 'ai', content: string}[]>([])
+  const [aiConversation, setAIConversation] = useState<{role: 'user' | 'ai', content: string, processed?: boolean}[]>([])
   const [loading, setLoading] = useState(false)
 
   // New state for temporary settings
   const [tempSlippage, setTempSlippage] = useState(slippage)
   const [tempDeadline, setTempDeadline] = useState(deadline)
+
+  const [ragLoading, setRagLoading] = useState(false); // State to track loading for the current rag_result entry
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0); // Index for the current message being displayed
+  const [showConfetti, setShowConfetti] = useState(false); // State to control confetti visibility
+  const conversationEndRef = useRef<HTMLDivElement | null>(null); // Create a ref for the conversation end
 
   useEffect(() => {
     // Load saved settings from localStorage when component mounts
@@ -62,6 +78,13 @@ export default function Component() {
       setTempDeadline(deadline)
     }
   }, [showSettings, slippage, deadline])
+
+  useEffect(() => {
+    // Scroll to the bottom of the conversation when a new message is added
+    if (conversationEndRef.current) {
+      conversationEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [aiConversation]); // Dependency on aiConversation
 
   const handleSwap = () => {
     setFromChain(toChain);
@@ -91,7 +114,23 @@ export default function Component() {
 
   const handleConfirmAddress = () => {
     setShowAddAddress(false);
-    // The destination address is now stored in the state and can be used elsewhere
+    setShowAIChat(false); // Close the AI dialog when confirming the address
+    
+    // Randomly select chains and tokens
+    const newFromChain = getRandomChain();
+    const newToChain = getRandomChain();
+    const newFromToken = getRandomToken();
+    const newToToken = getRandomToken();
+
+    // Update state with the randomly selected chains and tokens
+    setFromChain(newFromChain);
+    setToChain(newToChain);
+    setFromToken(newFromToken);
+    setToToken(newToToken);
+    
+    // Show confetti animation
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 4000); // Hide confetti after 5 seconds
   };
 
   const handleAIInputSubmit = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -103,11 +142,60 @@ export default function Component() {
 
     try {
       const { data } = await axios.post('http://localhost:8000/api/llm', {
-        query: aiInput,
-        vector: [0.1, 0.2, 0.3] // dummy vector
+        query: aiInput
       });
 
-      setAIConversation(prev => [...prev, { role: 'ai', content: data.llm_response }]);
+      // Add llm_response to the conversation
+      setAIConversation(prev => [
+        ...prev, 
+        { role: 'ai', content: data.llm_response }
+      ]);
+
+      // Check if rag_result is an array and process each entry sequentially
+      if (Array.isArray(data.rag_result)) {
+        const messagesToDisplay = data.rag_result.map((item: { service: string; action: string; api: string }) => ({
+          role: 'ai',
+          content: (
+            <>
+              <div className="flex items-center">
+                <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                <span>Service: {item.service}</span>
+              </div>
+              <div className="flex items-center">
+                <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                <span>Action: {item.action}</span>
+              </div>
+              <div className="flex items-center">
+                <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                <span>API: {item.api}</span>
+              </div>
+            </>
+          ),
+          processed: false // Track if the message has been processed
+        }));
+
+        // Function to display messages one by one
+        const displayMessages = async () => {
+          for (const message of messagesToDisplay) {
+            // Show the current message
+            setAIConversation(prev => [...prev, message]);
+
+            // Simulate processing time (reduced delay)
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Adjusted timeout to 1000ms
+
+            // Update the message to indicate it has been processed
+            setAIConversation(prev => {
+              const updatedMessages = prev.map((msg, index) => 
+                index === prev.length - 1 ? { ...msg, processed: true } : msg
+              );
+              return updatedMessages;
+            });
+          }
+        };
+
+        // Start displaying messages
+        await displayMessages();
+      }
     } catch (error) {
       console.error('Error calling the LLM API:', error);
       const errorMessage = axios.isAxiosError(error) && error.response?.data?.detail
@@ -129,8 +217,15 @@ export default function Component() {
     setShowSettings(false)
   }
 
+  const handleCancelAIChat = () => {
+    setAIConversation([]); // Clear all previous conversations
+    setAIInput(''); // Clear the input box
+    // Do not close the AI chat dialog
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-4">
+      {showConfetti && <Confetti />} {/* Render confetti when showConfetti is true */}
       <div className="w-full max-w-md space-y-6">
         <div className="mb-6">
           <div className="flex items-center bg-gray-600 rounded-lg p-2">
@@ -428,21 +523,38 @@ export default function Component() {
             <div className="h-96 overflow-y-auto p-4 space-y-4">
               {aiConversation.map((message, index) => (
                 <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-3/4 p-2 rounded-lg ${message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-200'}`}>
+                  <div className={`max-w-3/4 p-2 rounded-lg relative ${message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-200'}`}>
+                    {message.processed && (
+                      <CheckCircle className="text-green-500 absolute top-2 right-2" />
+                    )}
                     {message.content}
                   </div>
                 </div>
               ))}
+              <div ref={conversationEndRef} /> {/* Add a ref at the end of the conversation */}
             </div>
             <div className="bg-gray-700 p-2">
-              <input
-                type="text"
-                className="w-full bg-gray-600 text-white rounded-lg p-2 focus:outline-none"
-                placeholder="Type your message..."
-                value={aiInput}
-                onChange={(e) => setAIInput(e.target.value)}
-                onKeyPress={handleAIInputSubmit}
-              />
+              {/* Conditionally render input or buttons */}
+              {aiConversation.length > 0 && aiConversation[aiConversation.length - 1].processed ? (
+                <div className="flex justify-between p-2">
+                  <Button className="flex-1 bg-gray-500 text-white hover:bg-gray-600" onClick={handleCancelAIChat}>
+                    Cancel
+                  </Button>
+                  <Button className="flex-1 bg-gradient-to-r from-blue-400 to-blue-600 text-white" onClick={handleConfirmAddress}>
+                    Confirm
+                  </Button>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  className="w-full bg-gray-600 text-white rounded-lg p-2 focus:outline-none"
+                  placeholder="Type your message..."
+                  value={loading ? '' : aiInput} // Show empty string while loading
+                  onChange={(e) => setAIInput(e.target.value)}
+                  onKeyPress={handleAIInputSubmit}
+                  disabled={loading} // Disable input while loading
+                />
+              )}
             </div>
           </div>
         </div>
