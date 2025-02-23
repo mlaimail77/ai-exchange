@@ -23,7 +23,7 @@ pip install -r requirements.txt
 3. Add your OpenAI API key to the environment:
 
 ```bash
-export OPENAI_API_KEY="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"
+export OPENAI_API_KEY=""
 ```
 
 4. Run the FastAPI server:
